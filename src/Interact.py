@@ -1,39 +1,38 @@
 from web3 import Web3
-import json
+from Deploy import deploy_contract
 import os
-from dotenv import load_dotenv
 
-load_dotenv()
+contract_file = "./src/newContract.sol"
+contract_name= 'newContract'
+account = os.getenv("ANVIL_ACCOUNT")
+private_key = os.getenv("ANVIL_PRIVATE_KEY")
+provider = os.getenv("LOCAL_PROVIDER")
+chain_id = 31337
 
-# Load environment variables
-provider_url = os.getenv("http://127.0.0.1:8545")
-private_key = os.getenv("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
-account_address = os.getenv("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
+connection = Web3(Web3.HTTPProvider(provider))
 
-# Connect to the Anvil network
-web3 = Web3(Web3.HTTPProvider(provider_url))
-contract_address = "YOUR_DEPLOYED_CONTRACT_ADDRESS"  # Replace with actual address
+contract_address, abi = deploy_contract(contract_file,"newContract",account,private_key,provider,chain_id)
+print(f"Contract deployed at {contract_address}")
 
-# Load ABI
-with open("compiled.json", "r") as file:
-    compiled_sol = json.load(file)
-abi = compiled_sol['contracts']['newContract.sol']['newContract']['abi']
+simple_storage = connection.eth.contract(address=contract_address, abi=abi)
+nonce = connection.eth.get_transaction_count(account)
 
-# Create contract instance
-contract = web3.eth.contract(address=contract_address, abi=abi)
+print("Creating Transactions")
+transaction = simple_storage.functions.updateID(5341).build_transaction(
+    {
+        "chainId": chain_id,
+        "gasPrice": connection.eth.gas_price,
+        "from": account,
+        "nonce": nonce
 
-# Update StudentId
-nonce = web3.eth.get_transaction_count(account_address)
-update_tx = contract.functions.updateID(5341).build_transaction({
-    "chainId": 31337,
-    "gasPrice": web3.to_wei("20", "gwei"),
-    "from": account_address,
-    "nonce": nonce,
-})
-signed_update_tx = web3.eth.account.sign_transaction(update_tx, private_key=private_key)
-txn_hash = web3.eth.send_raw_transaction(signed_update_tx.rawTransaction)
-web3.eth.wait_for_transaction_receipt(txn_hash)
+    }
+)
+signed_txn = connection.eth.account.sign_transaction(transaction, private_key=private_key)
 
-# Retrieve updated StudentId
-updated_id = contract.functions.viewMyId().call()
-print(f"Updated value is {updated_id}")
+print("Updating stored Value")
+tx_hash = connection.eth.send_raw_transaction(signed_txn.raw_transaction)
+
+tx_receipt = connection.eth.wait_for_transaction_receipt(tx_hash)
+print("updated")
+updated_value = simple_storage.functions.viewMyId().call()
+print(f"Updated value is {updated_value}")
